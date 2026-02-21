@@ -56,9 +56,28 @@ We kindly ask you to use `uv` as your Python package manager.
 Make sure that `uv` is installed. Refer to [uv documentation](https://docs.astral.sh/uv/getting-started/installation/)
 
 ```bash
+# 1. Создаем виртуальное окружение
 uv venv
+
+# 2. Активируем его
 source .venv/bin/activate
-uv sync
+
+# 3. Устанавливаем все библиотеки (это обновит uv.lock и pyproject.toml)
+uv add fastapi uvicorn pydantic httpx langchain-huggingface langchain-community sentence-transformers tqdm chromadb "unstructured[pdf]"
+
+# 4. Запускаем скрипт для создания векторной базы
+uv run python scripts/build_index.py
+
+
+uv run uvicorn src.main:app --host 0.0.0.0 --port 8080 --reload
+uv run python evaluate.py -e http://localhost:8080/diagnose -d ./data/test_set -n my_test_run
+
+
+# 1. Сборка образа (точка в конце важна)
+docker build -t submission .
+
+# 2. Запуск контейнера
+docker run -p 8080:8080 submission
 ```
 
 ### 3. Running validation

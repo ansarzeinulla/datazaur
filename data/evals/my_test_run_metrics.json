@@ -1,0 +1,11 @@
+{
+  "submission_name": "my_test_run",
+  "total_protocols": 17,
+  "accuracy_at_1_percent": 0.0,
+  "recall_at_3_percent": 0.0,
+  "latency_avg_s": 0.285,
+  "latency_min_s": 0.139,
+  "latency_max_s": 1.96,
+  "latency_p50_s": 0.179,
+  "latency_p95_s": 2.132
+}

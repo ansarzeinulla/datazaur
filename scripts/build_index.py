@@ -1,70 +1,82 @@
 import json
 import os
+import shutil
 from pathlib import Path
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from tqdm import tqdm # Прогресс-бар нужен, чтобы не скучать
 
-CORPUS_DIR = Path("data/corpus") # Убедись, что тут лежит твой .json файл
+CORPUS_DIR = Path("data/corpus")
 DB_DIR = "chroma_db"
+BATCH_SIZE = 200 # Пишем пачками, чтобы не забить память
 
 def build_vector_db():
-    print("⏳ Загружаем модель эмбеддингов...")
+    # 0. Чистим старую базу
+    if os.path.exists(DB_DIR):
+        shutil.rmtree(DB_DIR)
+
+    print("⏳ Загружаем модель (rubert-tiny2)...")
     embeddings = HuggingFaceEmbeddings(model_name="cointegrated/rubert-tiny2")
     
+    # Используем 500/100 (лучше для точности, чем 1000)
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000, 
-        chunk_overlap=200,
+        chunk_size=500, 
+        chunk_overlap=100,
         separators=["\n\n", "\n", ".", " "]
     )
 
     documents = []
     metadatas = []
 
-    print(f"📂 Читаем JSON файлы из {CORPUS_DIR}...")
+    print(f"📂 Сканируем {CORPUS_DIR}...")
     json_files = list(CORPUS_DIR.glob("*.json"))
-    
-    if not json_files:
-        print("❌ Ошибка: Файлы не найдены! Проверь путь CORPUS_DIR.")
-        return
 
-    for file_path in json_files:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            
-            # ВАЖНОЕ ИСПРАВЛЕНИЕ: если это список, проходимся по каждому элементу
-            if isinstance(data, list):
-                items = data
-            else:
-                items = [data] # На всякий случай, если попадется одиночный объект
+    # 1. Читаем файлы (в одном потоке, зато стабильно)
+    for file_path in tqdm(json_files, desc="Чтение файлов"):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                
+            items = data if isinstance(data, list) else [data]
                 
             for item in items:
                 text = item.get("text", "")
-                if not text:
-                    continue
+                if not text: continue
                     
+                # Данные для контекста
+                title = item.get('title', 'Без названия')
+                codes = ", ".join(item.get('icd_codes', []))
+                
                 chunks = text_splitter.split_text(text)
                 
                 for chunk in chunks:
-                    documents.append(chunk)
+                    # ХАК ДЛЯ ПОБЕДЫ: Вшиваем контекст прямо в текст
+                    enriched_text = f"БОЛЕЗНЬ: {title}. КОД МКБ: {codes}. ТЕКСТ: {chunk}"
+                    
+                    documents.append(enriched_text)
                     metadatas.append({
                         "protocol_id": item.get("protocol_id", ""),
-                        "title": item.get("title", ""),
-                        "source_file": item.get("source_file", ""),
-                        "icd_codes": ", ".join(item.get("icd_codes", []))
+                        "title": title,
+                        "icd_codes": codes
                     })
+        except Exception as e:
+            print(f"Ошибка с файлом {file_path}: {e}")
 
-    print(f"🧩 Подготовлено {len(documents)} кусков текста.")
-    print("🧠 Векторизуем и сохраняем в ChromaDB (это может занять пару минут)...")
+    total_chunks = len(documents)
+    print(f"🧩 Готово к записи: {total_chunks} чанков.")
+
+    # 2. Пишем в базу
+    print("🧠 Создаем базу ChromaDB...")
+    vector_db = Chroma(persist_directory=DB_DIR, embedding_function=embeddings)
     
-    vector_db = Chroma.from_texts(
-        texts=documents,
-        metadatas=metadatas,
-        embedding=embeddings,
-        persist_directory=DB_DIR
-    )
+    # Пишем батчами (самый надежный способ)
+    for i in tqdm(range(0, total_chunks, BATCH_SIZE), desc="Векторизация"):
+        batch_docs = documents[i : i + BATCH_SIZE]
+        batch_meta = metadatas[i : i + BATCH_SIZE]
+        vector_db.add_texts(texts=batch_docs, metadatas=batch_meta)
     
-    print(f"✅ База успешно создана и сохранена в папку: ./{DB_DIR}/")
+    print(f"✅ База готова: {DB_DIR}")
 
 if __name__ == "__main__":
     build_vector_db()
