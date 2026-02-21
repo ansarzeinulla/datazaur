@@ -1,0 +1,11 @@
+{
+  "submission_name": "tomorrow",
+  "total_protocols": 220,
+  "accuracy_at_1_percent": 14.09,
+  "recall_at_3_percent": 54.55,
+  "latency_avg_s": 12.791,
+  "latency_min_s": 3.237,
+  "latency_max_s": 27.902,
+  "latency_p50_s": 12.077,
+  "latency_p95_s": 20.848
+}
