@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sentence_transformers import CrossEncoder 
 
 # --- НАСТРОЙКИ ---
-API_KEY = "sk-1f5LdNeuVjkH9U6Od6561A"
+API_KEY = ""
 HUB_URL = "https://hub.qazcode.ai" 
 MODEL = "oss-120b"
 
